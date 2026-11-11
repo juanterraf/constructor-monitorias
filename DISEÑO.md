@@ -94,6 +94,7 @@ Prefijo `demanda.` para lo que sale de la demanda; `boleta.` para el título (bo
 | boleta_fecha | ✓ | ✓ | Fecha de emisión |
 | monto_capital | ✓ | ✓ | |
 | monto_total | ✓ | ✓ | Lo reclamado |
+| monto_intereses | | ✓ | Opcional (`INTERESES $ …`); con capital y total, el chequeo B8 verifica la suma |
 | expediente_numero, caratula | ✓ | | |
 | juzgado.unidad, juzgado.centro, juzgado.nro_sentencia, juzgado.fecha_sentencia | | | Configuración o carga manual |
 
@@ -109,7 +110,7 @@ def ocr_imagen(ruta_png, idioma="spa") -> tuple[str, float]          # (texto, c
 def clasificar_paginas(paginas) -> list[dict]                        # completa "tipo"
 def detectar(paginas) -> dict                                        # {"organismo": {...}, "campos": {...}}
 # motor/cotejo.py
-def cotejar(campos) -> list[dict]          # [{"campo","demanda","boleta","resultado": "COINCIDE|DIFIERE|FALTA","detalle"}]
+def cotejar(campos) -> list[dict]          # [{"campo","demanda","boleta","resultado": "COINCIDE|DIFIERE|FALTA|SOLO BOLETA","detalle"}]   # SOLO BOLETA: la demanda no trae el dato; no bloquea
 # motor/chequeos.py
 def chequear(caso, config) -> list[dict]   # [{"id","titulo","resultado": "OK|OBSERVAR|FALTA|MANUAL","detalle"}]
 # motor/honorarios.py

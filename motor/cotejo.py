@@ -1,6 +1,6 @@
 """Cotejo de la demanda frente a la boleta, campo por campo. Sin IA.
 
-cotejar(campos) -> [{"campo", "demanda", "boleta", "resultado": COINCIDE|DIFIERE|FALTA, "detalle"}]
+cotejar(campos) -> [{"campo", "demanda", "boleta", "resultado": COINCIDE|DIFIERE|FALTA|SOLO BOLETA, "detalle"}]
 
 `campos` es el dict del caso: {"demanda.monto_capital": {"valor": "123.45", ...}, ...}.
 Se aceptan también valores planos ({"demanda.x": "..."}).
@@ -10,9 +10,13 @@ import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 
+from . import organismos
 from .honorarios import parse_monto
 
 COINCIDE, DIFIERE, FALTA = "COINCIDE", "DIFIERE", "FALTA"
+# La demanda no trae el dato y la boleta sí: no bloquea. FALTA queda para cuando falta en la boleta (el título).
+SOLO_BOLETA = "SOLO BOLETA"
+_PREFIJOS_CUIT = {"20", "23", "24", "25", "26", "27", "30", "33", "34"}
 
 # (campo, tipo de comparación)
 CAMPOS_COTEJO = [
@@ -47,6 +51,16 @@ def palabras(s, relleno=frozenset()) -> list:
 
 def solo_digitos(s) -> str:
     return re.sub(r"\D", "", str(s or ""))
+
+
+def cuit_valido(digitos) -> bool:
+    """CUIT/CUIL de 11 dígitos: prefijo habitual y dígito verificador (módulo 11)."""
+    d = solo_digitos(digitos)
+    if len(d) != 11 or d[:2] not in _PREFIJOS_CUIT:
+        return False
+    pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+    r = 11 - sum(int(a) * b for a, b in zip(d[:10], pesos)) % 11
+    return {11: 0, 10: 9}.get(r, r) == int(d[10])
 
 
 def valor_de(campos, nombre):
@@ -117,8 +131,18 @@ def _cmp_nombre(d, b, relleno=_RELLENO_NOMBRE):
 
 
 def _cmp_entidad(d, b):
-    """Ejecutante: coincide si las palabras de una denominación están contenidas en la otra
-    (la demanda puede decir 'SAT' completo o abreviado)."""
+    """Ejecutante: se compara por organismo canónico (SAT, DGR o MUNICIPALIDAD y su municipio), no por texto.
+    Si alguna denominación no se reconoce, coincide si las palabras de una contienen a las de la otra."""
+    (od, md), (ob, mb) = organismos.organismo_y_municipio(d), organismos.organismo_y_municipio(b)
+    if od and ob:
+        if od != ob:
+            return DIFIERE, f"Organismo en demanda: {od}; en boleta: {ob}."
+        if od == organismos.MUNICIPALIDAD:
+            wd, wb = set(palabras(md, _RELLENO_NOMBRE)), set(palabras(mb, _RELLENO_NOMBRE))
+            if not (wd <= wb or wb <= wd):
+                return DIFIERE, f"Municipio en demanda: {md}; en boleta: {mb}."
+            return COINCIDE, f"Mismo organismo ({od}) y mismo municipio."
+        return COINCIDE, f"Mismo organismo ({od})."
     pd_, pb = set(palabras(d, _RELLENO_ENTIDAD)), set(palabras(b, _RELLENO_ENTIDAD))
     if pd_ == pb or pd_ <= pb or pb <= pd_:
         return COINCIDE, "Denominación coincidente (una contiene a la otra)."
@@ -127,8 +151,14 @@ def _cmp_entidad(d, b):
 
 def _cmp_cuit(d, b):
     dd, db = solo_digitos(d), solo_digitos(b)
+    aviso = " ".join(f"El {lado} {x} no pasa el dígito verificador (puede figurar así en el padrón)."
+                     for lado, x in (("de la demanda", dd), ("de la boleta", db)) if len(x) == 11 and not cuit_valido(x))
     if dd == db:
-        return COINCIDE, "Mismos dígitos."
+        return COINCIDE, ("Mismos dígitos. " + aviso).strip()
+    # Un DNI frente a un CUIT o CUIL: coincide si es igual a los 8 dígitos centrales
+    for dni, cuit, lado in ((dd, db, "boleta"), (db, dd, "demanda")):
+        if 7 <= len(dni) <= 8 and len(cuit) == 11 and dni.zfill(8) == cuit[2:10]:
+            return COINCIDE, (f"El DNI es igual a los 8 dígitos centrales del CUIT/CUIL de la {lado}. " + aviso).strip()
     return DIFIERE, f"Demanda {dd or '-'} frente a boleta {db or '-'}."
 
 
@@ -190,10 +220,17 @@ def cotejar(campos) -> list:
     for campo, tipo in CAMPOS_COTEJO:
         d = valor_de(campos, f"demanda.{campo}")
         b = valor_de(campos, f"boleta.{campo}")
-        if d is None or b is None:
+        if d is None and b is not None:
+            filas.append(_fila(campo, d, b, SOLO_BOLETA, "La demanda no trae el dato; consta en la boleta."))
+            continue
+        if b is None:
             falta = [lado for lado, v in (("demanda", d), ("boleta", b)) if v is None]
             filas.append(_fila(campo, d, b, FALTA, "Falta el dato en: " + " y ".join(falta) + "."))
             continue
         res, det = _COMPARADORES[tipo](d, b)
+        if campo == "monto_capital" and res == DIFIERE:
+            tot = valor_de(campos, "boleta.monto_total")
+            if tot is not None and parse_monto(d) == parse_monto(tot):
+                res, det = COINCIDE, "La demanda reclama como capital el total de la boleta (capital más intereses)."
         filas.append(_fila(campo, d, b, res, det))
     return filas

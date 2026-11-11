@@ -270,7 +270,8 @@ class ReglasBoleta(unittest.TestCase):
         cm = [c for c in campo(malo, "boleta.ejecutado_documento")["candidatos"] if c["valor"] == "20123456781"][0]
         self.assertEqual(cb["regla"], "cuit-valido")
         self.assertEqual(cm["regla"], "cuit-dv-invalido")
-        self.assertLess(cm["confianza"], cb["confianza"] / 2)
+        self.assertLess(cm["confianza"], cb["confianza"])      # baja poco: no pierde contra un candidato peor
+        self.assertGreater(cm["confianza"], cb["confianza"] / 2)
 
     def test_boleta_dgr(self):
         r = det.detectar([pag(1, BOLETA_DGR)])

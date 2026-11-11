@@ -258,12 +258,23 @@ def caratula(caso):
     return v if v else "(sin carátula)"
 
 
+# Campos que la demanda puede no traer: vacíos, no hay nada que confirmar.
+OPCIONALES_VACIOS = {"demanda.boleta_fecha", "demanda.periodos", "demanda.boleta_numero", "demanda.monto_capital",
+                     "demanda.concepto", "boleta.monto_intereses"}
+
+
+def _vacio(c):
+    v = c.get("valor")
+    return v is None or (isinstance(v, (str, list, tuple)) and not v)
+
+
 def pendientes(caso):
-    return [k for k, c in caso.get("campos", {}).items() if not c.get("confirmado")]
+    return [k for k, c in caso.get("campos", {}).items()
+            if not c.get("confirmado") and not (k in OPCIONALES_VACIOS and _vacio(c))]
 
 
 def resumen_cotejo(caso):
-    r = {"COINCIDE": 0, "DIFIERE": 0, "FALTA": 0}
+    r = {"COINCIDE": 0, "DIFIERE": 0, "FALTA": 0, "SOLO BOLETA": 0}
     for f in caso.get("cotejo") or []:
         if f.get("resultado") in r:
             r[f["resultado"]] += 1

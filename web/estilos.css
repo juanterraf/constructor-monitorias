@@ -74,6 +74,7 @@ button.chica { padding: 3px 8px; font-size: 13px; }
 .p-ok, .p-alta, .p-COINCIDE { background: var(--ok-f); color: var(--ok); }
 .p-mal, .p-baja, .p-DIFIERE { background: var(--mal-f); color: var(--mal); }
 .p-ambar, .p-media, .p-FALTA-cotejo, .p-OBSERVAR, .p-revisar { background: var(--ambar-f); color: var(--ambar); }
+.p-SOLO-BOLETA { background: var(--info-f); color: var(--info); }
 .p-FALTA { background: var(--mal-f); color: var(--mal); }
 .p-MANUAL { background: var(--info-f); color: var(--info); }
 

@@ -16,8 +16,9 @@ juzgado.unidad, juzgado.centro, juzgado.nro_sentencia, juzgado.fecha_sentencia.
 """
 import re
 from datetime import date
+from decimal import Decimal
 
-from .cotejo import (DIFIERE, FALTA as C_FALTA, cotejar, palabras, parse_fecha, parse_periodos,
+from .cotejo import (DIFIERE, FALTA as C_FALTA, cotejar, cuit_valido, palabras, parse_fecha, parse_periodos,
                      solo_digitos, valor_de)
 from .honorarios import parse_monto
 from .config import para_motor
@@ -54,17 +55,6 @@ def organismo_de(caso):
     return v if v in ORGANISMOS else None
 
 
-def cuit_valido(digitos) -> bool:
-    """CUIT/CUIL de 11 dígitos: prefijo habitual y dígito verificador (módulo 11)."""
-    d = solo_digitos(digitos)
-    if len(d) != 11 or d[:2] not in {"20", "23", "24", "25", "26", "27", "30", "33", "34"}:
-        return False
-    pesos = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-    r = 11 - sum(int(a) * b for a, b in zip(d[:10], pesos)) % 11
-    verif = {11: 0, 10: 9}.get(r, r)
-    return verif == int(d[10])
-
-
 def centro_notificacion(domicilio):
     """Centro judicial del domicilio real del ejecutado, o None si no se puede decir."""
     t = " ".join(palabras(domicilio or ""))
@@ -95,7 +85,9 @@ def chequear(caso, config) -> list:
     exp, car = g("demanda.expediente_numero"), g("demanda.caratula")
     faltan = [n for n, v in (("número de expediente", exp), ("carátula", car)) if not v]
     r.append(_c("A1", "Expediente y carátula", FALTA if faltan else OK,
-                ("Falta: " + ", ".join(faltan) + ".") if faltan else "Constan número de expediente y carátula."))
+                (("Falta: " + ", ".join(faltan) + ".")
+                 + (" Cargá el número de expediente que asignó mesa de entradas: la demanda no lo trae." if not exp else ""))
+                if faltan else "Constan número de expediente y carátula."))
 
     dom = g("demanda.ejecutado_domicilio") or g("boleta.ejecutado_domicilio")
     centro = centro_notificacion(dom)
@@ -159,7 +151,7 @@ def chequear(caso, config) -> list:
             d = solo_digitos(v)
             if len(d) == 11:
                 if not cuit_valido(d):
-                    malos.append(f"{lado}: {d} (CUIT/CUIL con dígito verificador inválido)")
+                    malos.append(f"{lado}: {d} (CUIT/CUIL con dígito verificador inválido; verificar contra el padrón)")
             elif not 7 <= len(d) <= 8:
                 malos.append(f"{lado}: {d} (no es CUIT/CUIL de 11 dígitos ni DNI de 7 u 8)")
         r.append(_c("B3", "CUIT/CUIL/DNI del ejecutado válido", OBSERVAR if malos else OK,
@@ -205,6 +197,17 @@ def chequear(caso, config) -> list:
                 "Decide el juez. Constan en la boleta: " + ", ".join(n for n, v in puntos if v) + "."
                 + (f" No constan: {', '.join(faltan_b)}." if faltan_b else "")
                 + " Verificar a mano la firma del funcionario competente y el lugar de emisión (no se detectan)."))
+
+    # B8. La boleta suma bien (solo si constan capital, intereses y total)
+    b_cap, b_int, b_tot = g("boleta.monto_capital"), g("boleta.monto_intereses"), g("boleta.monto_total")
+    if b_cap is not None and b_int is not None and b_tot is not None:
+        suma, total = parse_monto(b_cap) + parse_monto(b_int), parse_monto(b_tot)
+        if abs(suma - total) <= Decimal("0.05"):
+            r.append(_c("B8", "La boleta suma bien", OK, f"Capital {parse_monto(b_cap):.2f} + intereses {parse_monto(b_int):.2f} = total {total:.2f}."))
+        else:
+            r.append(_c("B8", "La boleta suma bien", OBSERVAR,
+                        f"Capital más intereses da {suma:.2f} y el total de la boleta es {total:.2f} "
+                        f"(diferencia de {abs(suma - total):.2f})."))
 
     # C. Vía y partes
     if org is None:

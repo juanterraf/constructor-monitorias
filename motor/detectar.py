@@ -15,7 +15,7 @@ CAMPOS_DEMANDA = [
 ]
 CAMPOS_BOLETA = [
     "ejecutante", "ejecutado_nombre", "ejecutado_documento", "ejecutado_domicilio", "concepto",
-    "periodos", "boleta_numero", "boleta_fecha", "monto_capital", "monto_total",
+    "periodos", "boleta_numero", "boleta_fecha", "monto_capital", "monto_total", "monto_intereses",
 ]
 MAX_CANDIDATOS = 8
 
@@ -118,6 +118,12 @@ def _expandir(m1: int, a1: int, m2: int, a2: int) -> list[str]:
     return out
 
 
+def _emision_ym(plano: str) -> str | None:
+    """'AAAA-MM' de «a los 06 días del mes de noviembre de 2025», o None."""
+    m = re.search(rf"a\s+los\s+(\d{{1,2}})\s+d[i1]as\s+del\s+mes\s+de\s+({_MES_RE})\s*(?:de|del)?\s*(\d{{4}})", plano)
+    return f"{int(m.group(3)):04d}-{MESES[m.group(2)]:02d}" if m else None
+
+
 def periodos_en(plano: str) -> list[tuple[list[str], str, int, int, float]]:
     """[(períodos, regla, ini, fin, confianza base)]; los rangos ya vienen expandidos."""
     res: list[tuple[list[str], str, int, int, float]] = []
@@ -137,6 +143,16 @@ def periodos_en(plano: str) -> list[tuple[list[str], str, int, int, float]]:
     if len(tabla) >= 2:
         lista = [f"{a}-{m:02d}" for _, _, m, a in tabla if 1 <= m <= 12]
         agregar(lista, "periodos-tabla", tabla[0][0], tabla[-1][1], 0.9)
+    else:
+        # Tabla de la SAT leída por OCR: «01° Mes/2021», con la marca de orden deformada («11*», «06"»).
+        # Los posteriores a la emisión de la boleta son errores de lectura (2031 por 2021): se descartan.
+        emision = _emision_ym(plano)
+        filas = [(m.start(), m.end(), int(m.group(1)), int(m.group(2))) for m in re.finditer(
+            r"(?<![\d/])(\d{1,2})[°º*\"´'‘’]?\s*mes\s*/\s*(\d{4})(?!\d)", plano)]
+        lista = sorted({f"{a:04d}-{m:02d}" for _, _, m, a in filas
+                        if 1 <= m <= 12 and not (emision and f"{a:04d}-{m:02d}" > emision)})
+        if lista:
+            agregar(lista, "periodos-tabla-mes", filas[0][0], filas[-1][1], 0.85)
     # MM/AAAA a MM/AAAA
     for m in re.finditer(r"(?<![\d/])(\d{1,2})\s*/\s*(\d{4})\s*(?:a|al|hasta(?:\s+el)?|-)\s*(\d{1,2})\s*/\s*(\d{4})(?!\d)", plano):
         if libre(m.start(), m.end()):
@@ -166,7 +182,8 @@ def periodos_en(plano: str) -> list[tuple[list[str], str, int, int, float]]:
             sueltos.append((m.start(), m.end(), f"{int(m.group(2)):04d}-{int(m.group(1)):02d}"))
     for m in re.finditer(rf"({_MES_RE})\s*(?:de|del)\s*(20\d\d|19\d\d)", plano):
         previo = plano[max(0, m.start() - 8): m.start()]
-        if re.search(r"\d\s*(?:de\s*)?$", previo) or not libre(m.start(), m.end()):
+        # «a los 06 días del mes de noviembre de 2025» es la fecha de emisión, no un período
+        if re.search(r"\d\s*(?:de\s*)?$", previo) or re.search(r"mes\s+de\s*$", previo) or not libre(m.start(), m.end()):
             continue
         sueltos.append((m.start(), m.end(), f"{int(m.group(2)):04d}-{MESES[m.group(1)]:02d}"))
     if sueltos:
@@ -420,35 +437,59 @@ def _base_contexto(c: _Ctx, pos: int, es_cabecera: bool = False) -> float:
     return 0.45
 
 
+_ETIQ_CUIT = r"c\.?\s?u\.?\s?[i1l]{1,2}\.?\s?[tl]\.?"
+_PREFIJOS_PERSONA = ("20", "23", "24", "27")
+
+
 def _regla_documento(c: _Ctx):
     p = c.p
     vistos = set()
+    antes = len(c.acum.get(f"{c.pref}.ejecutado_documento", []))
+
+    def ejecutante_conocido(digitos, ini, fin) -> bool:
+        """El CUIT de un ejecutante conocido es candidato a ejecutante, nunca a documento del ejecutado."""
+        o = org.CUIT_EJECUTANTES.get(digitos)
+        if not o:
+            return False
+        c.add("ejecutante", org.NOMBRES_CANONICOS.get(o, o), ini, fin, "cuit-ejecutante", 0.8)
+        return True
+
     # CUIT / CUIL con guiones, o con la etiqueta delante
     for m in re.finditer(r"(?<!\d)(20|23|24|25|26|27|30|33|34)\s?-?\s?(\d{8})\s?-?\s?(\d)(?!\d)", p):
         digitos = "".join(m.groups())
-        etiqueta = re.search(r"c\.?\s?u\.?\s?i\.?\s?[tl]\.?(?:/c\.?u\.?i\.?l\.?)?\s*(?:n°?)?\s*[:\-]?\s*$", p[max(0, m.start() - 30): m.start()])
+        etiqueta = re.search(_ETIQ_CUIT + r"(?:/c\.?u\.?i\.?l\.?)?\s*(?:n°?)?\s*[:\-]?\s*$", p[max(0, m.start() - 30): m.start()])
         if not etiqueta and "-" not in m.group(0):
             continue
         if (digitos, c.pag["n"]) in vistos:
             continue
         vistos.add((digitos, c.pag["n"]))
+        if ejecutante_conocido(digitos, m.start(), m.end()):
+            continue
         valido = cuit_valido(digitos)
         cab = c.pref == "boleta" and m.start() < 400 and bool(re.search(r"cuit/cuil\s*:\s*$", p[max(0, m.start() - 12): m.start()]))
         base = _base_contexto(c, m.start(), cab)
-        conf = base * (1.0 if valido else 0.4)
+        conf = base * (1.0 if valido else 0.85)  # dígito verificador inválido: baja poco; la regla lo deja marcado
         if valido and base >= 0.45:
             conf += 0.08
         c.add("ejecutado_documento", digitos, m.start(), m.end(), "cuit-valido" if valido else "cuit-dv-invalido", conf)
     # CUIT contiguo con etiqueta (DGR: «CUIT/CUIL: 30711279977»)
-    for m in re.finditer(r"c\.?u\.?i\.?[tl]\.?(?:/cuil)?\s*(?:n°?)?\s*[:\-]?\s*(\d{11})(?!\d)", p):
+    for m in re.finditer(_ETIQ_CUIT + r"(?:/cuil)?\s*(?:n°?)?\s*[:\-]?\s*(\d{11})(?!\d)", p):
         d = m.group(1)
         if (d, c.pag["n"]) in vistos:
             continue
         vistos.add((d, c.pag["n"]))
+        if ejecutante_conocido(d, m.start(), m.end()):
+            continue
         valido = cuit_valido(d)
         base = _base_contexto(c, m.start(), c.pref == "boleta" and m.start() < 400)
         c.add("ejecutado_documento", d, m.start(), m.end(), "cuit-valido" if valido else "cuit-dv-invalido",
-              base * (1.0 if valido else 0.4))
+              base * (1.0 if valido else 0.85))
+    # Varios CUIT en la página: para una persona humana se prefieren los prefijos 20, 23, 24 y 27
+    nuevos = c.acum.get(f"{c.pref}.ejecutado_documento", [])[antes:]
+    if any(x["valor"][:2] in _PREFIJOS_PERSONA for x in nuevos) and any(x["valor"][:2] not in _PREFIJOS_PERSONA for x in nuevos):
+        for x in nuevos:
+            if x["valor"][:2] not in _PREFIJOS_PERSONA:
+                x["confianza"] = round(x["confianza"] * 0.6, 3)
     # DNI
     if "poder" in p[:400] and "escritura" in p[:600]:
         return
@@ -577,6 +618,15 @@ def _regla_boleta_numero(c: _Ctx):
             vistos.add(v)
             ini = m.start(1) + n.start()
             c.add("boleta_numero", v, ini, ini + len(v), "boleta-numero-ancla", 0.85)
+    if c.pref == "boleta":
+        # «N 12345/2025» en las primeras líneas (el OCR pierde el «°» y el título)
+        lineas = [(m.start(), m.group()) for m in re.finditer(r"[^\n]+", p) if m.group().strip()][:5]
+        for off, ln in lineas:
+            for m in re.finditer(r"(?<![a-z])n\s*[°º*?o]?\s*(\d{3,}/(?:19|20)\d\d)(?!\d)", ln):
+                v = m.group(1)
+                if v not in vistos:
+                    vistos.add(v)
+                    c.add("boleta_numero", v, off + m.start(1), off + m.end(1), "boleta-numero-cabecera", 0.7)
     m = re.search(r"n°\s*de\s*boleta\s*de\s*deuda\s*:?\s*[^\w]{0,3}([a-z]{2,4}/\S{1,10}/\S{2,5})", p)
     if m:
         raw = t[m.start(1):m.end(1)].upper()
@@ -676,6 +726,11 @@ def _regla_montos(c: _Ctx):
         v = parse_monto(m.group(1))
         if v:
             c.add("monto_capital", v, m.start(), m.end(1), "etiqueta-capital", 0.78)
+    if pref == "boleta":
+        for m in re.finditer(r"(?<![a-z])intereses?\s*:?\s*\$\s*(" + _NUM + r")", p):
+            v = parse_monto(m.group(1))
+            if v:
+                c.add("monto_intereses", v, m.start(), m.end(1), "etiqueta-intereses", 0.8)
     for m in re.finditer(r"(?:importe\s+total|monto\s+total|total\s+adeudado|deuda\s+total|total\s+reclamado)\s*(?:de|por|:)?\s*\$?\s*(" + _NUM + r")", p):
         v = parse_monto(m.group(1))
         if v:

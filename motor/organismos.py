@@ -5,6 +5,7 @@ Todo trabaja sobre texto «plano»: minúsculas y sin tildes (ver detectar._plan
 from __future__ import annotations
 
 import re
+import unicodedata
 
 SAT = "SAT"
 MUNICIPALIDAD = "MUNICIPALIDAD"
@@ -32,6 +33,10 @@ ABREV_MUNICIPIO = {
 }
 
 NOMBRES_CANONICOS = {SAT: "SAT", DGR: "DGR"}
+
+# CUIT de los ejecutantes (solo dígitos) -> organismo. Figuran en sus demandas y boletas;
+# nunca son el documento del ejecutado.
+CUIT_EJECUTANTES = {"30708617888": SAT}  # 30-70861788-8
 
 # Palabras que delatan que un «nombre» es en realidad el ejecutante o una repartición.
 PALABRAS_ENTIDAD = (
@@ -65,3 +70,13 @@ def _titulo(s: str) -> str:
     part = {"de", "del", "la", "las", "los", "y"}
     pal = s.lower().split()
     return " ".join(w if (i and w in part) else w.capitalize() for i, w in enumerate(pal))
+
+
+def organismo_y_municipio(texto: str) -> tuple[str | None, str | None]:
+    """(organismo, municipio) de una denominación de ejecutante en texto libre; (None, None) si no se reconoce.
+    El municipio solo se informa para MUNICIPALIDAD (en minúsculas y sin tildes)."""
+    p = "".join(c for c in unicodedata.normalize("NFD", str(texto or "")) if unicodedata.category(c) != "Mn").lower()
+    canon, o = canon_ejecutante(p, p)
+    if o != MUNICIPALIDAD:
+        return o, None
+    return o, re.sub(r"^municipalidad de\s+", "", (canon or "").lower()).strip()

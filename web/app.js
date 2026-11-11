@@ -6,12 +6,16 @@ const ETIQUETAS = {
   ejecutado_nombre: "Ejecutado", ejecutado_documento: "Documento", ejecutado_domicilio: "Domicilio",
   concepto: "Concepto", periodos: "Períodos", boleta_numero: "Número de boleta",
   boleta_fecha: "Fecha de emisión", monto_capital: "Monto de capital", monto_total: "Monto total",
-  expediente_numero: "Expediente", caratula: "Carátula", unidad: "Unidad judicial",
+  expediente_numero: "N° de expediente (lo asigna mesa de entradas)", monto_intereses: "Intereses", caratula: "Carátula", unidad: "Unidad judicial",
   centro: "Centro judicial", nro_sentencia: "N.º de sentencia", fecha_sentencia: "Fecha de sentencia",
 };
 const GRUPOS = [["demanda", "Demanda"], ["boleta", "Boleta"], ["juzgado", "Juzgado"]];
 const PASOS = ["Detectar", "Construir", "Chequear", "Generar"];
 const ALTA = 0.8;
+/* Campos que la demanda puede no traer: vacíos, no cuentan como pendientes (igual que en servidor.py). */
+const OPCIONALES_VACIOS = ["demanda.boleta_fecha", "demanda.periodos", "demanda.boleta_numero", "demanda.monto_capital",
+  "demanda.concepto", "boleta.monto_intereses"];
+const vacioCampo = (c) => c.valor === null || c.valor === undefined || c.valor === "" || (Array.isArray(c.valor) && !c.valor.length);
 
 const app = {
   vista: "uno", paso: 1, caso: null, campoSel: null, config: null, ocr: null,
@@ -214,7 +218,7 @@ function pasoConstruir() {
     const c = campos[k], cand = candidatoElegido(c);
     return !c.confirmado && c.valor !== null && c.valor !== "" && cand && cand.confianza >= ALTA && !revisarOcr(k, c);
   });
-  const pendientes = claves.filter((k) => !campos[k].confirmado).length;
+  const pendientes = claves.filter((k) => !campos[k].confirmado && !(OPCIONALES_VACIOS.includes(k) && vacioCampo(campos[k]))).length;
   const izq = el("div", {},
     el("div", { class: "acciones" },
       el("button", { class: "primario", disabled: !altos.length, onclick: () => {
@@ -331,7 +335,7 @@ function pasoChequear() {
     el("thead", {}, el("tr", {}, ["Campo", "Demanda", "Boleta", "Resultado", "Detalle"].map((h) => el("th", {}, h)))),
     el("tbody", {}, (cotejo || []).map((f) => el("tr", {},
       el("td", {}, ETIQUETAS[f.campo] || f.campo), el("td", {}, textoValor(f.demanda) || "—"), el("td", {}, textoValor(f.boleta) || "—"),
-      el("td", {}, el("span", { class: "pildora p-" + (f.resultado === "FALTA" ? "FALTA-cotejo" : f.resultado) }, f.resultado)),
+      el("td", {}, el("span", { class: "pildora p-" + (f.resultado === "FALTA" ? "FALTA-cotejo" : f.resultado === "SOLO BOLETA" ? "SOLO-BOLETA" : f.resultado) }, f.resultado)),
       el("td", { class: "chico" }, f.detalle || "")))));
   const lista = el("ul", { class: "chequeos" }, (chequeos || []).map((c) => el("li", {},
     el("span", { class: "pildora p-" + c.resultado }, c.resultado),
@@ -435,7 +439,7 @@ function dibujarLote() {
   $("#estado-lote").textContent = procesando ? "Procesando " + procesando + " expediente(s)…" : (app.lote.length ? app.lote.length + " expediente(s)." : "");
   cuerpo.replaceChildren(...(app.lote.length ? app.lote.map((c) => {
     const k = c.cotejo || {};
-    const hayCotejo = (k.COINCIDE || 0) + (k.DIFIERE || 0) + (k.FALTA || 0) > 0;
+    const hayCotejo = (k.COINCIDE || 0) + (k.DIFIERE || 0) + (k.FALTA || 0) + (k["SOLO BOLETA"] || 0) > 0;
     return el("tr", {},
       el("td", {}, c.estado === "procesando" ? "(procesando…)" : c.caratula, c.error ? el("div", { class: "chico" }, c.error) : null),
       el("td", {}, c.organismo || "—"),
@@ -444,7 +448,8 @@ function dibujarLote() {
       el("td", {}, hayCotejo ? [
         k.COINCIDE ? el("span", { class: "pildora p-COINCIDE" }, k.COINCIDE + " coinciden ") : null, " ",
         k.DIFIERE ? el("span", { class: "pildora p-DIFIERE" }, k.DIFIERE + " difieren") : null, " ",
-        k.FALTA ? el("span", { class: "pildora p-FALTA-cotejo" }, k.FALTA + " faltan") : null] : "—"),
+        k.FALTA ? el("span", { class: "pildora p-FALTA-cotejo" }, k.FALTA + " faltan") : null, " ",
+        k["SOLO BOLETA"] ? el("span", { class: "pildora p-SOLO-BOLETA" }, k["SOLO BOLETA"] + " solo boleta") : null] : "—"),
       el("td", {}, el("button", { class: "chica", disabled: c.estado === "procesando" || c.estado === "error", onclick: () => abrirCaso(c.id) }, "Abrir")));
   }) : [el("tr", {}, el("td", { colspan: "6", class: "chico" }, "Todavía no hay expedientes. Soltá los PDF arriba."))]));
 }
