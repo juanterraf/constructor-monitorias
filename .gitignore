@@ -1,0 +1,4 @@
+# Datos de trabajo: expedientes reales, no se suben
+casos/
+*.local.json
+__pycache__/

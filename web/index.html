@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Constructor de monitorias</title>
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<header class="barra">
+  <h1>Constructor de monitorias</h1>
+  <nav class="vistas" aria-label="Vistas">
+    <button class="vista-btn activa" data-vista="uno">Un expediente</button>
+    <button class="vista-btn" data-vista="lote">Lote</button>
+  </nav>
+  <button id="btn-config" class="secundario">Juzgado</button>
+</header>
+
+<div id="aviso-ocr" class="aviso" hidden></div>
+<div id="mensaje" class="aviso error" role="alert" hidden></div>
+
+<main>
+  <!-- UN EXPEDIENTE -->
+  <section id="vista-uno">
+    <ol class="pasos" id="pasos"></ol>
+    <div id="paso"></div>
+  </section>
+
+  <!-- LOTE -->
+  <section id="vista-lote" hidden>
+    <div class="soltar" id="soltar-lote" tabindex="0">
+      <p><strong>Soltá acá los PDF</strong>, uno por expediente.</p>
+      <p class="chico">O <label class="enlace">elegilos<input type="file" id="archivos-lote" accept="application/pdf,.pdf" multiple hidden></label>.</p>
+    </div>
+    <div class="acciones">
+      <button id="btn-generar-lote" class="primario">Generar todas las listas (.zip)</button>
+      <span id="estado-lote" class="chico"></span>
+    </div>
+    <div class="tabla-caja">
+      <table class="tabla" id="tabla-lote">
+        <thead><tr><th>Carátula</th><th>Organismo</th><th>Estado</th><th>Confirmados</th><th>Cotejo</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg-config">
+  <form method="dialog" id="form-config">
+    <h2>Datos del juzgado</h2>
+    <label>Unidad judicial <input name="unidad_judicial"></label>
+    <label>Centro judicial <input name="centro_judicial"></label>
+    <label>Ciudad <input name="ciudad"></label>
+    <label>Próximo número de sentencia <input name="proximo_nro_sentencia" type="number" min="1"></label>
+    <fieldset>
+      <legend>Criterios del juzgado</legend>
+      <label>Tasa de interés <input name="tasa_interes" placeholder="Ej.: tasa activa del Banco de la Nación Argentina"></label>
+      <label>Cuenta judicial <input name="cuenta_judicial"></label>
+      <label>Martillero <input name="martillero"></label>
+      <label>Presupuesto para intereses y costas (%) <input name="presupuesto_pct" type="number" step="any" min="0"></label>
+    </fieldset>
+    <fieldset>
+      <legend>Honorarios por defecto</legend>
+      <label>En la sentencia <select name="modo_honorarios"><option value="regular">Se regulan (Ley 5.480)</option><option value="diferir">Se difieren</option></select></label>
+      <label>Porcentaje art. 14 <input name="pct_art14" type="number" step="any" min="0"></label>
+      <label>Multiplicador <input name="multiplicador" type="number" step="any" min="0"></label>
+      <label>Mínimo del C.A.T. <input name="minimo_cat" type="number" step="any" min="0"></label>
+      <label class="check"><input name="reduccion" type="checkbox"> Aplicar reducción</label>
+    </fieldset>
+    <div class="acciones">
+      <button value="cancelar" class="secundario">Cancelar</button>
+      <button value="guardar" class="primario" id="guardar-config">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
