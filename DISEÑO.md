@@ -142,8 +142,8 @@ def generar_docx(caso, config, ruta_salida) -> str
 
 ## Material de referencia
 
-- Reglas del dominio: `C:\dev\monitorias\artefacto.txt` (estructura, vía según organismo, fórmulas, resuelvo, formato) y `C:\dev\monitorias\src\lib\ai\prompts\` (`schemas.ts`, `seeds.ts`, checklist A–J).
-- Honorarios: `C:\dev\monitorias\src\lib\honorarios\calc.ts` y su test.
+- Reglas del dominio: el artefacto original de los relatores (estructura de la sentencia, vía según organismo, fórmulas, resuelvo y formato) y los prompts de la app `monitorias` (checklist A–J de control). No están en este repositorio.
+- Honorarios: `motor/honorarios.py` porta el cálculo de la Ley 5.480 de la app `monitorias`, con sus casos de prueba.
 - Plantilla oficial: `plantillas/Plantilla-Sentencia-Monitoria-PJT.docx`, con `{caratula}`, `{expediente}`, `{nroSentencia}`, `{fechaSentencia}`, `{unidadJudicial}`, `{centroJudicial}`, `{fechaImpresion}` y `{@cuerpo}` (el cuerpo va como OOXML).
-- Muestras reales: `C:\Users\ROG BY NG\OneDrive\Documentos\IA\ClaudeDay\Skills\Ejecutivo\` (demandas de SAT, Municipalidad y DGR; tres sentencias monitorias reales) y `…\ClaudeDay\Rentas\Juicios\LISTADO PRUEBA.xlsx`.
+- Muestras reales: demandas de SAT, Municipalidad y DGR, tres sentencias monitorias reales y un listado de causas. Sirvieron para calibrar la detección y los textos, y **no están en el repositorio** porque tienen datos personales. Para medir la detección con las propias: `python herramientas/evaluar_muestras.py <carpeta con PDF>`.
 - Los datos personales de las muestras **no se copian** al repositorio: ni en tests ni en ejemplos.

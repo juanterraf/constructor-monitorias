@@ -2,6 +2,14 @@
 
 Arma sentencias monitorias a partir de la demanda y la boleta de deuda (SAT, Municipalidad y DGR), **sin IA** y sin que nada salga de la computadora. Paso a paso: detectar, construir, chequear y generar. También procesa varios expedientes a la vez.
 
+## Por qué es público
+
+Es una iniciativa de [derechointeligente.com.ar](https://derechointeligente.com.ar). Lo publicamos completo, con el código, el diseño y las reglas, para que cualquier juzgado, relator o estudio pueda usarlo, copiarlo, adaptarlo a su modelo de sentencia y mejorarlo.
+
+Muestra que no todo necesita IA. Comparar una demanda con una boleta es una cuenta, y escribir una sentencia monitoria sin excepciones es llenar un modelo. Eso lo hace el código, sin alucinar y sin mandar los datos a ningún lado. La persona revisa y firma.
+
+> ⚖️ Es una herramienta de productividad, no reemplaza el control del juez ni constituye asesoramiento jurídico. Los textos de `plantillas/` siguen el modelo de un juzgado de Tucumán: cada juzgado debe revisarlos y adaptarlos a su criterio.
+
 ## Arrancar
 
 1. Requisitos: Python 3 y `pip install -r requirements.txt` (PyMuPDF, pytesseract, Pillow, openpyxl). Para leer páginas escaneadas, además, Tesseract con el idioma español (`scoop install tesseract tesseract-languages`, o el instalador de UB-Mannheim). Sin Tesseract funciona igual, pero las páginas escaneadas se cargan a mano.
@@ -40,3 +48,7 @@ El servidor escucha solo en `127.0.0.1`: no se puede abrir desde otra computador
 - **Criterio jurídico**: la prescripción, la habilidad del título y la tasa de interés quedan para la persona (MANUAL o [COMPLETAR]).
 - **Normas que faltan**: en DGR y Municipalidad, el artículo del Código Tributario que da fuerza ejecutiva al título no está en las fuentes, así que queda [COMPLETAR].
 - **Pagaré**: todavía no está cubierto.
+
+## Licencia
+
+[MIT](LICENSE): se puede usar, copiar, modificar y distribuir libremente, también con fines comerciales, manteniendo el aviso de copyright y de licencia.
